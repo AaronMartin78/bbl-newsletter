@@ -78,3 +78,31 @@ def test_config_missing_key_fails(tmp_path):
     cfg.write_text("registry: r.yaml\n", encoding="utf-8")
     with pytest.raises(SystemExit, match="missing required key"):
         load_config(cfg)
+
+
+
+def test_publish_failure_exits_nonzero(config, tmp_path, monkeypatch, capsys):
+    """A failed publish must fail the command: the daily run's exit status
+    and the Kuma heartbeat depend on it (website audit finding 2026-10-24)."""
+    from datetime import date
+
+    from bbl_newsletter import publish as publish_mod
+
+    site = tmp_path / "site" / "bbl"
+    site.mkdir(parents=True, exist_ok=True)
+    (site / f"{date.today().isoformat()}.qmd").write_text(
+        "---\ntitle: x\n---\n", encoding="utf-8"
+    )
+    repo = tmp_path / "website"
+    repo.mkdir()
+    with config.open("a", encoding="utf-8") as f:
+        f.write(f"website_repo: {repo}\n")
+
+    def boom(*args, **kwargs):
+        raise publish_mod.PublishError("push rejected")
+
+    monkeypatch.setattr(publish_mod, "publish_edition", boom)
+    rc = main(["--config", str(config), "publish"])
+    out = json.loads(capsys.readouterr().out)
+    assert out["publish"].startswith("failed:")
+    assert rc == 1
