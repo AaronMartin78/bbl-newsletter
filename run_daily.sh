@@ -34,9 +34,16 @@ if [ $status -eq 0 ]; then
     else
         echo "WARN: /mnt/data_lake not mounted, NAS backup skipped"
     fi
+    # Re-check status: the backup above may have failed after a good
+    # pipeline run, and "up" must only ever mean everything succeeded.
     if [ -f "$KUMA_URL_FILE" ]; then
-        curl -fsS "$(cat "$KUMA_URL_FILE")?status=up&msg=edition-ok" >/dev/null \
-            || echo "WARN: Kuma heartbeat failed"
+        if [ $status -eq 0 ]; then
+            curl -fsS "$(cat "$KUMA_URL_FILE")?status=up&msg=edition-ok" >/dev/null \
+                || echo "WARN: Kuma heartbeat failed"
+        else
+            curl -fsS "$(cat "$KUMA_URL_FILE")?status=down&msg=backup-failed" >/dev/null \
+                || true
+        fi
     fi
 else
     echo "RUN FAILED with status $status"
