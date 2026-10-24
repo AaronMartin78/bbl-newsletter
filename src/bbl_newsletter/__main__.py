@@ -207,6 +207,10 @@ def main(argv: list[str] | None = None) -> int:
 
     con.close()
     print(json.dumps(out, indent=2, default=str))
+    # A failed publish must fail the command (and so the daily run and the
+    # Kuma heartbeat); "skipped: ..." states stay successful by design.
+    if str(out.get("publish", "")).startswith("failed:"):
+        return 1
     return 0
 
 

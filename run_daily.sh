@@ -25,9 +25,12 @@ if [ $status -eq 0 ]; then
     BACKUP_DIR=/mnt/data_lake/newsletters/bbl   # NAS CIFS mount on HUB
     if mountpoint -q /mnt/data_lake; then
         mkdir -p "$BACKUP_DIR"
-        rsync -a data/ "$BACKUP_DIR/data/"
-        rsync -a site/ "$BACKUP_DIR/site/"
-        echo "NAS backup done: $BACKUP_DIR"
+        if rsync -a data/ "$BACKUP_DIR/data/" && rsync -a site/ "$BACKUP_DIR/site/"; then
+            echo "NAS backup done: $BACKUP_DIR"
+        else
+            echo "BACKUP FAILED: rsync to $BACKUP_DIR"
+            status=1
+        fi
     else
         echo "WARN: /mnt/data_lake not mounted, NAS backup skipped"
     fi
