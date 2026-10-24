@@ -1,0 +1,192 @@
+# BBL Newsletter - source registry
+# version: 1 (2026-10-12)
+# Companion note: bbl_newsletter_source_verification_2026-10-12.md
+# status values:
+#   ready         - verified accessible and permitted as observed
+#   conditional   - accessible but with restrictions (see reason)
+#   pending_check - not verifiable from the 2026-10-12 toolchain; check at first run from LAN
+#   disabled      - do not collect (see reason)
+# All robots/TDM findings are point-in-time. The collector re-checks robots.txt at runtime.
+
+version: 1
+
+defaults:
+  user_agent: "bbl-newsletter-collector/0.1 (private, non-commercial; +https://aaron-martin-phd.dev)"
+  obey_robots: true
+  conditional_get: true
+  request_timeout_s: 15
+  max_articles_per_source_per_run: 20
+
+sources:
+  # ---- League / European ----
+  - id: bbl_newscenter
+    publisher: easyCredit BBL (official)
+    type: league
+    url: https://easycredit-bbl.de/newscenter
+    method: html_listing            # server-rendered Next.js, observed 2026-10-12
+    article_host: cms.easycredit-bbl.de
+    article_url_pattern: 'https://cms\.easycredit-bbl\.de/de/n/news/'
+    feed: none
+    robots: >
+      https://cms.easycredit-bbl.de/robots.txt returns 404 (nginx/1.22.1),
+      checked from HUB by owner 2026-10-17: no robots policy, crawling not
+      restricted; the fetcher's runtime robots check stays on regardless
+    status: ready
+  - id: euroleague_news
+    publisher: Euroleague Basketball (official)
+    type: league
+    language: en
+    url: https://www.euroleaguebasketball.net/en/euroleague/news/
+    method: unknown
+    robots: site unreachable from toolchain 2026-10-12 (two attempts)
+    status: pending_check
+  - id: eurohoops_bbl
+    publisher: Eurohoops
+    type: aggregator
+    language: en
+    feed: https://www.eurohoops.net/en/bbl/feed/
+    method: rss
+    status: ready
+    reason: census 2026-10-04 verified feed; low volume, big-club bias
+
+  # ---- Club sites (from census 2026-10-04, read not re-verified) ----
+  - {id: hagen,        publisher: Phoenix Hagen,            type: club, method: rss, feed: "https://phoenix-hagen.de/feed/", status: ready}
+  - {id: hamburg,      publisher: Veolia Towers Hamburg,    type: club, method: rss, feed: "https://www.hamburgtowers.de/feed/", status: ready, reason: "towers.hamburg is squatted, do not use"}
+  - {id: mbc,          publisher: Syntainics MBC,           type: club, method: rss, feed: "https://syntainics-mbc.de/feed/", status: ready}
+  - {id: rostock,      publisher: Rostock Seawolves,        type: club, method: rss, feed: "https://www.seawolves.de/feed/", status: ready, reason: "full bodies in feed"}
+  - {id: trier,        publisher: Vet-Concept Gladiators Trier, type: club, method: rss, feed: "https://vetconceptgladiators.de/feed/", status: ready, reason: "low news yield"}
+  - {id: braunschweig, publisher: Basketball Loewen Braunschweig, type: club, method: rss, feed: "https://basketball-loewen.de/feed/", status: conditional, reason: "robots disallows feed for crawlers; compliance call before use"}
+  - {id: alba,         publisher: Alba Berlin,              type: club, method: html_listing, url: "https://www.albaberlin.de/news", status: ready, reason: "no feed found; mixed men/women/youth stream, filter needed"}
+  - {id: bayern,       publisher: FC Bayern Basketball,     type: club, method: sitemap, url: "https://fcbayern.com/basketball/de/news", status: ready, reason: "JS listing; use sitemap.xml or Gatsby page-data endpoints; articles server-rendered"}
+  - {id: oldenburg,    publisher: EWE Baskets Oldenburg,    type: club, method: html_listing, url: "https://www.ewe-baskets.de/news/", status: ready}
+  - {id: chemnitz,     publisher: Niners Chemnitz,          type: club, method: html_listing, url: "https://www.chemnitz99.de/news", status: ready, reason: "custom CMS; niners-chemnitz.de does not resolve"}
+  - {id: vechta,       publisher: Rasta Vechta,             type: club, method: html_listing, url: "https://www.rasta-vechta.de/news", status: ready}
+  - {id: bamberg,      publisher: Bamberg Baskets,          type: club, method: html_listing, url: "https://www.bamberg.basketball/news/", status: ready, reason: "relative date strings; bambergbaskets.de is parked, do not use"}
+  - {id: bonn,         publisher: Telekom Baskets Bonn,     type: club, method: html_listing, url: "https://www.telekom-baskets-bonn.de/presse/newsarchiv", status: ready}
+  - {id: frankfurt,    publisher: Skyliners Frankfurt,      type: club, method: html_listing, url: "https://www.frankfurt-skyliners.de/news-service/news-archiv", status: ready}
+  - {id: ulm,          publisher: ratiopharm Ulm,           type: club, method: html_listing, url: "https://www.ratiopharmulm.com/news/", status: ready, reason: "/feed/ is a valid but empty shell; wp-json blocked"}
+  - {id: wuerzburg,    publisher: Wuerzburg Baskets,        type: club, method: html_listing, url: "https://www.wuerzburg-baskets.de/news/aktuelle-news", status: ready}
+  - {id: ludwigsburg,  publisher: MHP Riesen Ludwigsburg,   type: club, status: disabled, reason: "robots.txt disallows all paths (census 2026-10-04); use regional/press coverage instead"}
+  - {id: jena,         publisher: Science City Jena,        type: club, url: "https://sciencecityjena.de", status: pending_check, reason: "TLS handshake failure from research toolchain 2026-10-04; recheck from LAN"}
+
+  # ---- Regional press: public broadcasters (ARD) ----
+  - id: hessenschau
+    publisher: hessenschau (hr/ARD)
+    type: regional_public
+    covers: [frankfurt]
+    feed: https://www.hessenschau.de/sport/index.rss
+    method: rss
+    robots: generic crawlers allowed on content paths; AI-training UAs blocked (observed 2026-10-12)
+    status: conditional
+    reason: >
+      TDM reservation in robots.txt with an exception for RAG/grounding when
+      directives are followed and content is attributed; contact justiziariat@hr.de
+      for permissions. Feed returned items dated 2026-09-10 on a 2026-10-12 fetch;
+      verify freshness at build time.
+  - id: br24
+    publisher: BR24 (BR/ARD)
+    type: regional_public
+    covers: [bayern, bamberg, wuerzburg]
+    url: https://www.br.de
+    method: sitemap
+    sitemap: https://www.br.de/nachrichten/sitemaps/index.xml
+    robots: generic crawlers allowed on news content; AI-training UAs blocked (owner-supplied robots.txt, 2026-10-12)
+    status: conditional
+    reason: >
+      ARD TDM reservation (Stand 19.05.2026): prohibits use for AI training/model
+      development; explicit exception for RAG/grounding when robots directives are
+      followed and content is attributed to its source. Contact nutzungsvorbehalt@br.de.
+  - id: mdr
+    publisher: MDR (ARD)
+    type: regional_public
+    covers: [jena, chemnitz, mbc]
+    url: https://www.mdr.de
+    method: sitemap
+    sitemap: https://www.mdr.de/sitemap/mdr-news-ueberblick-102~news.xml
+    # /video-* pages are thin multi-sport roundups; one put an RB Leipzig
+    # women's football paragraph inside a Niners story (problem 3, 2026-10-14)
+    exclude_url_pattern: '/video-'
+    robots: >
+      generic crawlers allowed on news content (disallows cover internal paths,
+      mediathek portal, *.json, player pages); site-mirroring tools (HTTrack etc.)
+      and AI-training UAs blocked (owner-supplied robots.txt, 2026-10-12)
+    status: conditional
+    reason: >
+      Same ARD TDM reservation (Stand 19.05.2026) as br24/hessenschau: prohibits
+      AI training/model development use; explicit exception for RAG/grounding with
+      robots compliance and source attribution. Contact: postal/phone only in the
+      file (MDR, Kantstr. 71-73, 04275 Leipzig), no email given.
+  - id: ndr
+    publisher: NDR (ARD)
+    type: regional_public
+    covers: [rostock, hamburg, oldenburg, braunschweig, vechta]
+    url: https://www.ndr.de
+    method: sitemap
+    sitemap: https://www.ndr.de/news-102~news.xml
+    robots: >
+      generic crawlers allowed on news content (disallows cover app media, *.json,
+      player pages, m3u8, teletext); AI-training UAs blocked
+      (owner-supplied robots.txt, 2026-10-12)
+    status: conditional
+    reason: >
+      Same ARD TDM reservation (Stand per template) as br24/mdr/hessenschau:
+      prohibits AI training/model development use; explicit exception for
+      RAG/grounding with robots compliance and source attribution.
+      Contact ndr@ndr.de.
+  - id: swr
+    publisher: SWR (ARD)
+    type: regional_public
+    covers: [ulm, ludwigsburg, trier]
+    url: https://www.swr.de
+    method: sitemap
+    sitemap: https://www.swr.de/~sitemap/sport/index.xml   # dedicated SWR Sport news sitemap
+    robots: >
+      generic crawlers allowed on content (disallows cover /api/, /cms/, search
+      and pjax fragments only); AI-training UAs blocked
+      (owner-supplied robots.txt, 2026-10-12)
+    status: conditional
+    reason: >
+      Same ARD TDM reservation (Stand 19.05.2026): prohibits AI training/model
+      development use; explicit exception for RAG/grounding with robots compliance
+      and source attribution. Contact seo@swr.de.
+  - id: rbb24
+    publisher: rbb24 (rbb/ARD)
+    type: regional_public
+    covers: [alba]
+    url: https://www.rbb24.de
+    method: unknown   # no Sitemap lines in the supplied robots.txt; determine discovery route at build (probe rbb24.de sitemap/feed)
+    robots: >
+      generic crawlers allowed on content (disallows cover /test/, raw /content/rbb/
+      CMS paths, /av/, /vorlagen/); site-mirroring tools and AI-training UAs blocked
+      (owner-supplied robots.txt, 2026-10-12)
+    status: conditional
+    reason: >
+      Same ARD TDM reservation (Stand 19.05.2026): prohibits AI training/model
+      development use; explicit exception for RAG/grounding with robots compliance
+      and source attribution. Contact ki@rbb-online.de.
+  - id: wdr
+    publisher: WDR (ARD)
+    type: regional_public
+    covers: [bonn, hagen]
+    url: https://www.wdr.de
+    method: unknown   # no Sitemap lines in the supplied robots.txt; determine discovery route at build (WDR sport/news sitemap or feed)
+    robots: >
+      generic crawlers allowed on content (disallows cover kids-TV sections, /php/,
+      /rw/, config and codebase paths); AI-training UAs blocked
+      (owner-supplied robots.txt, 2026-10-12)
+    status: conditional
+    reason: >
+      Same ARD TDM reservation (Stand 19.05.2026): prohibits AI training/model
+      development use; explicit exception for RAG/grounding with robots compliance
+      and source attribution. Contact ki@wdr.de.
+
+  # ---- Regional press: commercial ----
+  - {id: abendzeitung_muenchen, publisher: Abendzeitung Muenchen, type: regional_commercial, covers: [bayern], method: sitemap, url: "https://www.abendzeitung-muenchen.de", sitemap: "https://www.abendzeitung-muenchen.de/news-artikel.sitemap.xml", status: ready, reason: "robots fully open, no AI rules, no TDM reservation (observed 2026-10-12)"}
+  - {id: nordkurier, publisher: Nordkurier, type: regional_commercial, covers: [rostock], method: sitemap, url: "https://www.nordkurier.de", sitemap: "https://www.nordkurier.de/sitemaps/nord/google-news-sitemap-index.xml", status: conditional, reason: "generic crawlers allowed, no TDM text, but 14 named AI UAs blocked incl. ClaudeBot/anthropic-ai (observed 2026-10-12)"}
+  - {id: infranken, publisher: inFranken, type: regional_commercial, covers: [bamberg], url: "https://www.infranken.de", status: disabled, reason: "s44b UrhG TDM reservation; automated access without permission prohibited (robots comment, observed 2026-10-12)"}
+  - {id: stuttgarter_zeitung, publisher: Stuttgarter Zeitung, type: regional_commercial, covers: [ludwigsburg], url: "https://www.stuttgarter-zeitung.de", status: disabled, reason: "s44b UrhG TDM reservation, automated collection without permission prohibited, anthropic-ai blocked; permission contact digitalservice@stuttgarter-zeitung.de (observed 2026-10-12)"}
+  - {id: freiepresse, publisher: Freie Presse, type: regional_commercial, covers: [chemnitz], url: "https://www.freiepresse.de", status: disabled, reason: "robots disallowed the verification fetcher outright 2026-10-12"}
+  - {id: merkur_tz, publisher: Muenchner Merkur / tz, type: regional_commercial, covers: [bayern], url: "https://www.merkur.de", status: pending_check, reason: "domain blocked for verification toolchain 2026-10-12"}
+  - {id: otz, publisher: Ostthueringer Zeitung, type: regional_commercial, covers: [jena], url: "https://www.otz.de", status: pending_check, reason: "domain blocked for verification toolchain 2026-10-12"}
+  - {id: swp, publisher: Suedwest Presse, type: regional_commercial, covers: [ulm], url: "https://www.swp.de", status: pending_check, reason: "domain blocked for verification toolchain 2026-10-12"}
+  - {id: ostsee_zeitung, publisher: Ostsee-Zeitung, type: regional_commercial, covers: [rostock], url: "https://www.ostsee-zeitung.de", status: pending_check, reason: "not probed 2026-10-12"}

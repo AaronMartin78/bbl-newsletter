@@ -1,0 +1,37 @@
+version: 1
+defaults:
+  user_agent: "bbl-newsletter-collector/0.1 (test)"
+  obey_robots: true
+  conditional_get: true
+  request_timeout_s: 15
+  max_articles_per_source_per_run: 20
+sources:
+  - id: hagen
+    publisher: Phoenix Hagen
+    type: club
+    method: rss
+    feed: https://phoenix-hagen.de/feed/
+    status: ready
+  - id: hessenschau
+    publisher: hessenschau (hr/ARD)
+    type: regional_public
+    covers: [frankfurt]
+    method: rss
+    feed: https://www.hessenschau.de/sport/index.rss
+    status: conditional
+    reason: TDM reservation with attribution-based RAG exception
+  - id: mdr
+    publisher: MDR (ARD)
+    type: regional_public
+    covers: [jena, chemnitz, mbc]
+    method: sitemap
+    sitemap: https://www.mdr.de/sitemap/mdr-news-ueberblick-102~news.xml
+    url: https://www.mdr.de
+    status: pending_check
+  - id: stuttgarter_zeitung
+    publisher: Stuttgarter Zeitung
+    type: regional_commercial
+    covers: [ludwigsburg]
+    url: https://www.stuttgarter-zeitung.de
+    status: disabled
+    reason: s44b TDM reservation

@@ -1,0 +1,25 @@
+# bbl-newsletter runtime configuration (paths relative to this file).
+# Copy to config.yaml on HUB and adjust; config.yaml is machine-specific.
+
+registry: ./newsletter_sources.yaml
+schema: ./schema.sql
+db: data/newsletter.duckdb        # HUB-local; backed up to NAS after each run
+data_dir: data                    # article bodies under data/articles/
+site_dir: site/bbl                # rendered editions (<date>.qmd)
+
+# Website publishing (clone per website/README.md; publish is skipped
+# with a notice until this path exists):
+website_repo: /home/aaron-martin/newsletter/website
+website_branch: editions
+
+schedule_listing: https://www.easycredit-bbl.de/saison/spielplaene_liga-pokalspiele  # observed in site nav 2026-10-13; /spielplan is 404
+
+ollama:
+  host: http://127.0.0.1:11434
+  model: llama3.1:8b              # owner decision 2026-10-13
+  timeout_s: 900                  # 8B on CPU incl. first-call model load
+  think: false                    # reasoning models: skip the <think> monologue; remove this line if Ollama rejects it
+  options:
+    temperature: 0.2
+    num_ctx: 8192                 # prompts carry several article excerpts
+    num_predict: 350              # summary + headline never need more
