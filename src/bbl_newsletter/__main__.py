@@ -7,6 +7,7 @@
     python -m bbl_newsletter --config config.yaml summarize [--date YYYY-MM-DD]
     python -m bbl_newsletter --config config.yaml render    [--date YYYY-MM-DD]
     python -m bbl_newsletter --config config.yaml run       [--date YYYY-MM-DD]
+    python -m bbl_newsletter --config config.yaml link      --reference DIR
 
 `run` executes collect -> schedule -> cluster -> summarize -> render for the
 given date (default: today in Europe/Berlin). Every stage is idempotent, so
@@ -95,10 +96,13 @@ def main(argv: list[str] | None = None) -> int:
                         help="article URL for exclude (repeatable)")
     parser.add_argument("--reason", default=None,
                         help="reason recorded with exclude")
+    parser.add_argument("--reference", type=Path, default=None,
+                        help="shared reference package directory for link")
     parser.add_argument(
         "command",
         choices=["init", "collect", "schedule", "cluster", "summarize",
-                 "render", "publish", "cleanup", "exclude", "run"],
+                 "render", "publish", "cleanup", "exclude", "run",
+                 "link"],
     )
     args = parser.parse_args(argv)
 
@@ -200,6 +204,13 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit("exclude needs at least one --url")
         out["exclude"] = exclude_articles(con, args.url, reason=args.reason)
 
+    if args.command == "link":
+        from . import shared_refs
+        if args.reference is None:
+            raise SystemExit("link needs --reference DIR")
+        out["reference_id"] = shared_refs.load(con, args.reference)
+        out["link"] = shared_refs.check(con)
+
     if args.command == "cleanup":
         from .maintenance import cleanup_listing_articles, retag_articles
         out["cleanup"] = cleanup_listing_articles(con, registry)
@@ -210,6 +221,10 @@ def main(argv: list[str] | None = None) -> int:
     # A failed publish must fail the command (and so the daily run and the
     # Kuma heartbeat); "skipped: ..." states stay successful by design.
     if str(out.get("publish", "")).startswith("failed:"):
+        return 1
+    # Team disagreement between the newsletter and the reference is a data
+    # error to resolve, not something to paper over.
+    if out.get("link", {}).get("conflicts"):
         return 1
     return 0
 

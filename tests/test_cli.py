@@ -106,3 +106,8 @@ def test_publish_failure_exits_nonzero(config, tmp_path, monkeypatch, capsys):
     out = json.loads(capsys.readouterr().out)
     assert out["publish"].startswith("failed:")
     assert rc == 1
+
+
+def test_link_requires_a_reference_package(config):
+    with pytest.raises(SystemExit, match="--reference"):
+        main(["--config", str(config), "link"])
