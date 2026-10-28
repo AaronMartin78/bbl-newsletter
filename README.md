@@ -92,6 +92,17 @@ Not yet built: private delivery of full translations (Discord webhook).
     cp config.example.yaml config.yaml   # set ollama.model after benchmark
     uv run python -m bbl_newsletter --config config.yaml run
 
+## Link to shared BBL IDs
+
+    uv run python -m bbl_newsletter --config config.yaml link --reference DIR
+
+`DIR` is a shared reference package published from the NAS database by the
+vault's `Databases/bbl_shared_keys.py`. `link` verifies its checksums, loads
+it into `shared_*` tables, and reports BBL/Pokal games and teams that do not
+resolve plus any game whose teams disagree with the reference (exit 1 on a
+conflict). Joins go through `canonical_games` and `canonical_article_teams`;
+the pipeline never mints canonical IDs.
+
 ## Run tests
 
     uv run pytest
