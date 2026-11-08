@@ -10,6 +10,29 @@ Migrated out of the Homelab-Vault 2026-10-24; the vault keeps the
 operational documentation (handoffs, run notes, registry decision records)
 and the website/deploy scaffolds.
 
+## Game box scores
+
+Set `boxscore_database` to the existing canonical BBL SQLite database (on HUB:
+`/mnt/nas_docs/BBL/BBL/data/processed/bbl.db`). The renderer opens one read-only
+transaction and joins through the newsletter's existing `canonical_games`
+alignment. It never scrapes, allocates IDs or changes the source database.
+Official BBL/Pokal recaps get final and quarter scores, team statistics and
+expandable player tables, with an official game-page citation. An explicit,
+unambiguous `article_games` recap link also supports an older general-news
+story whose own `game_uid` is absent. Sponsor-free club aliases for Bamberg
+Baskets and Gladiators Trier use the existing tagging rules.
+
+Team identities, competition, duplicate players, quarter totals and player
+points must reconcile before a box score is shown. Missing numeric values
+remain unknown, including legacy empty numeric fields. Previews and unrelated
+news get no score card. An unavailable source or incomplete record produces
+“Box score unavailable” on eligible recaps and does not block publication.
+
+To test a published edition, copy `data/newsletter.duckdb` while no writer is
+active, run the renderer against that copy and the read-only source, then run
+`tools/check_edition.py` and the website's Quarto build. This leaves published
+summary text, summary IDs and live edition receipts untouched until deployment.
+
 ## Layout
 
 - `src/bbl_newsletter/ids.py` - hash/id conventions (canonical URL, article_id,

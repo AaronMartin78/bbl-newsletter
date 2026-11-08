@@ -7,6 +7,10 @@ db: data/newsletter.duckdb        # HUB-local; backed up to NAS after each run
 data_dir: data                    # article bodies under data/articles/
 site_dir: site/bbl                # rendered editions (<date>.qmd)
 
+# Optional read-only canonical SQLite database already populated by Hermes.
+# No scraper or write access is needed; missing/unverified box scores are omitted.
+# boxscore_database: /mnt/nas_docs/BBL/BBL/data/processed/bbl.db
+
 # Website publishing (clone per website/README.md; publish is skipped
 # with a notice until this path exists):
 website_repo: /home/aaron-martin/newsletter/website

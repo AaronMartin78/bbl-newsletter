@@ -52,6 +52,7 @@ STATUS_MAP = {"OFFICIAL": "final", "CANCELLED": "cancelled", "POSTPONED": "postp
 # relevance keywords use these). Substring match, case-insensitive, reviewed
 # against the 18 clubs of 2026-27. Unmatched teams get a slugified name.
 SLUG_OVERRIDES = [
+    ("bamberg baskets", "bamberg"), ("gladiators trier", "trier"),
     ("bayern", "bayern"), ("alba", "alba"), ("ulm", "ulm"),
     ("bamberg", "bamberg"), ("würzburg", "wuerzburg"), ("wuerzburg", "wuerzburg"),
     ("chemnitz", "chemnitz"), ("niners", "chemnitz"), ("jena", "jena"),

@@ -48,18 +48,26 @@ def _edition_rows(con: duckdb.DuckDBPyConnection, edition_date: date):
             SELECT story_id,
                    string_agg(article_id, ',' ORDER BY article_id) AS members_key
             FROM story_articles GROUP BY story_id
+        ), story_games AS (
+            SELECT sa.story_id, min(ag.game_uid) AS game_uid
+            FROM story_articles sa JOIN article_games ag USING (article_id)
+            WHERE ag.reference = 'recap'
+            GROUP BY sa.story_id HAVING count(DISTINCT ag.game_uid) = 1
         )
-        SELECT su.summary_id, st.story_id, st.kind, st.game_uid,
+        SELECT su.summary_id, st.story_id, st.kind, coalesce(st.game_uid, sg.game_uid),
                su.text_en, g.tipoff, g.matchday,
                EXISTS (
                    SELECT 1 FROM edition_items ei2
                    JOIN summaries su3 USING (summary_id)
                    WHERE su3.story_id = st.story_id AND ei2.edition_date < ?
-               ) AS updated
+               ) AS updated, g.status,
+               EXISTS (SELECT 1 FROM story_articles sa JOIN article_games ag USING (article_id)
+                       WHERE sa.story_id=st.story_id AND ag.reference='recap') AS has_recap
         FROM summaries su
         JOIN stories st USING (story_id)
         JOIN story_members sm USING (story_id)
-        LEFT JOIN games g ON g.game_uid = st.game_uid
+        LEFT JOIN story_games sg ON sg.story_id = st.story_id
+        LEFT JOIN games g ON g.game_uid = coalesce(st.game_uid, sg.game_uid)
         WHERE su.status IN (?, ?)
           AND CAST(su.created_at AS DATE)
               BETWEEN ? - INTERVAL 1 DAY AND ?
@@ -96,8 +104,11 @@ def _citations(con: duckdb.DuckDBPyConnection, story_id: str) -> list[tuple[str,
     ).fetchall()
 
 
-def _item_md(headline: str, body: str, citations: list[tuple[str, str, str]]) -> str:
-    lines = [f"### {headline}", "", body, "", "Sources:", ""]
+def _item_md(headline: str, body: str, citations: list[tuple[str, str, str]], boxscore: str = '') -> str:
+    lines = [f"### {headline}", "", body, ""]
+    if boxscore:
+        lines += [boxscore, '']
+    lines += ["Sources:", ""]
     lines += [f"- [{pub}: {title}]({url})" for pub, title, url in citations]
     return "\n".join(lines)
 
@@ -107,6 +118,7 @@ def render_edition(
     edition_date: date,
     out_dir: Path,
     now: Optional[datetime] = None,
+    boxscore_database: Optional[Path] = None,
 ) -> Optional[Path]:
     """Write <out_dir>/<date>.qmd and record the edition. Returns the path,
     or None when there is nothing publishable (no empty editions)."""
@@ -115,9 +127,12 @@ def render_edition(
     if not rows:
         return None
 
+    from .boxscores import load_boxscores, render_boxscore
+    boxes = load_boxscores(con, boxscore_database, [r[3] for r in rows if r[3] and (r[8] == 'final' or r[9])]) if boxscore_database else {}
+
     sections: dict[str, list[str]] = {s: [] for s in SECTION_ORDER}
     items: list[tuple[str, str, int]] = []  # (summary_id, section, position)
-    for summary_id, story_id, kind, _game_uid, text_en, tipoff, _md, updated in rows:
+    for summary_id, story_id, kind, _game_uid, text_en, tipoff, _md, updated, game_status, has_recap in rows:
         section = KIND_TO_SECTION.get(kind, "team_news")
         headline, _, body = text_en.partition("\n\n")
         # The game date tells the reader which night this was, and the
@@ -130,7 +145,17 @@ def render_edition(
                 note += " *(updated with new sources)*"
             body = f"{note}\n\n{body}"
         citations = _citations(con, story_id)
-        sections[section].append(_item_md(headline.strip(), body.strip(), citations))
+        box_md = ''
+        if _game_uid and (game_status == 'final' or has_recap) and _game_uid.split(':')[0] in ('bbl', 'pokal') and boxscore_database:
+            box = boxes.get(_game_uid)
+            if box:
+                box_md = render_boxscore(box)
+                official_url = f'https://www.easycredit-bbl.de/spiele/{box["game_id"]}'
+                if official_url not in [c[2] for c in citations]:
+                    citations.append(('easyCredit BBL', 'Official game and box score', official_url))
+            else:
+                box_md = '*Box score unavailable.*'
+        sections[section].append(_item_md(headline.strip(), body.strip(), citations, box_md))
         items.append((summary_id, section, len(sections[section])))
 
     parts = [

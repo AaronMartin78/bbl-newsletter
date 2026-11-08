@@ -176,7 +176,9 @@ def main(argv: list[str] | None = None) -> int:
         }
 
     if args.command in ("render", "run"):
-        path = render_edition(con, edition_date, base / cfg["site_dir"])
+        boxscore_database = cfg.get('boxscore_database')
+        path = render_edition(con, edition_date, base / cfg["site_dir"],
+                              boxscore_database=base / boxscore_database if boxscore_database else None)
         out["render"] = str(path) if path else None
 
     if args.command in ("publish", "run"):
