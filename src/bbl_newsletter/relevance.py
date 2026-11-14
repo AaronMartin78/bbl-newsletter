@@ -48,8 +48,11 @@ ALWAYS_RELEVANT_TYPES = {"league", "club", "aggregator"}
 # a website ("begins tomorrow at 10:00 AM"); filtered by title for every
 # source type, clubs included (owner review problem 5, 2026-10-14). Only
 # unambiguous sale/promo words - a bare "Ticket" can be legitimate news.
-# The words per source language are in league.LEXICON.
+# The words per source language are in league.LEXICON; a source language
+# without a lexicon (English aggregators) has no promo filter.
 def is_promo(*texts: str | None, language: str = "de") -> bool:
+    if language not in LEXICON:
+        return False
     pattern = r"\b(" + LEXICON[language]["promo"] + r")\b"
     return bool(re.search(pattern, " ".join(t for t in texts if t), re.IGNORECASE))
 

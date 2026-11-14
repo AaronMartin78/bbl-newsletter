@@ -137,6 +137,7 @@ def test_relevance_uses_league_keywords_and_language():
     assert not is_candidate(regional, "El Málaga CF gana en fútbol", league=ACB)
     assert is_promo("Abonos a la venta para la temporada", language="es")
     assert not is_promo("Abonos a la venta", language="de")
+    assert not is_promo("Season tickets on sale", language="en")  # no English lexicon
 
 
 def test_articles_are_tagged_through_loaded_aliases(con, league_db):
