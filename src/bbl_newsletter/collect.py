@@ -20,6 +20,7 @@ import duckdb
 from . import extract, ids, relevance
 from .discover import discover
 from .fetch import Fetcher
+from .league import BBL, League
 from .registry import Registry, Source
 
 
@@ -91,6 +92,7 @@ def collect_source(
     data_dir: Path,
     max_articles: int = 20,
     now: Optional[datetime] = None,
+    league: League = BBL,
 ) -> SourceReport:
     now = now or _utcnow()
     report = SourceReport(source_id=source.id, status="ok")
@@ -112,9 +114,9 @@ def collect_source(
                 break
             if exclude and exclude.search(item.url):
                 continue
-            if not relevance.is_candidate(source, item.title):
+            if not relevance.is_candidate(source, item.title, league=league):
                 continue
-            if relevance.is_promo(item.title):
+            if relevance.is_promo(item.title, language=source.language):
                 continue
             if _known(con, ids.article_id(item.url)):
                 continue
@@ -136,7 +138,7 @@ def collect_source(
                 title = title or extracted.title
                 published = published or extracted.published_at
             fetched += 1
-            if relevance.is_promo(title):  # title may only exist post-extraction
+            if relevance.is_promo(title, language=source.language):  # title may only exist post-extraction
                 continue
             # No date from feed, sitemap or page: age unknown, so the article
             # can never be shown as news. Stored (for the record) but stale,
@@ -169,6 +171,7 @@ def collect_all(
     data_dir: Path,
     now: Optional[datetime] = None,
     progress: Optional[Callable[[SourceReport], None]] = None,
+    league: League = BBL,
 ) -> tuple[str, list[SourceReport]]:
     """One collect run over all usable sources, recorded in runs/run_sources."""
     now = now or _utcnow()
@@ -181,7 +184,7 @@ def collect_all(
         rep = collect_source(
             con, source, fetcher, data_dir,
             max_articles=registry.defaults.max_articles_per_source_per_run,
-            now=now,
+            now=now, league=league,
         )
         reports.append(rep)
         if progress is not None:

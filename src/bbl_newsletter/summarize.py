@@ -25,6 +25,7 @@ import duckdb
 from pydantic import BaseModel, ValidationError
 
 from . import ids
+from .league import BBL, League
 
 PROMPT_VERSION = "v3"  # v3: person/team identity rules (owner review problems 1-2, 2026-10-14)
 MIN_WORDS, MAX_WORDS = 30, 250
@@ -36,9 +37,9 @@ Generate = Callable[[str], str]
 
 # ------------------------------------------------------------------ prompt
 _PROMPT = """You are writing one item for a daily English-language newsletter
-about German professional basketball (easyCredit BBL).
+about {description}.
 
-Below are {n} German-language source article(s) about the same {what}. Write:
+Below are {n} {language}-language source article(s) about the same {what}. Write:
 1. "headline": a short English headline (at most 12 words).
 2. "summary": one English paragraph of 60-180 words that combines the facts
    from ALL sources into a single composite account. Use only facts stated
@@ -60,14 +61,17 @@ Respond with ONLY a JSON object: {{"headline": "...", "summary": "..."}}
 def build_prompt(
     members: list[tuple[str, Optional[str], str]],  # (publisher, title, body)
     game_line: Optional[str] = None,
+    league: League = BBL,
 ) -> str:
     # keep the fullest reports; deterministic (length, then publisher)
     members = sorted(members, key=lambda m: (-len(m[2]), m[0]))[:MAX_SOURCES_PER_STORY]
     sources = "\n\n".join(
-        f"[{i + 1}] {publisher} - {title or 'ohne Titel'}\n{body[:BODY_CHARS_PER_SOURCE]}"
+        f"[{i + 1}] {publisher} - {title or league.lexicon['untitled']}\n{body[:BODY_CHARS_PER_SOURCE]}"
         for i, (publisher, title, body) in enumerate(members)
     )
     return _PROMPT.format(
+        description=league.description,
+        language=league.lexicon["name"],
         n=len(members),
         what="game" if game_line else "topic",
         game_context=f"GAME: {game_line}\n\n" if game_line else "",
@@ -125,33 +129,22 @@ def parse_response(raw: str) -> tuple[str, str]:
 
 
 # --------------------------------------------------------------- validation
-_GERMAN_MARKERS = re.compile(
-    r"\b(und|nicht|gegen|wurde|wurden|dass|beim|einen|eine[rm]?|spiel|sieg|niederlage)\b",
-    re.IGNORECASE,
-)
-
 # A competition round the summary names must appear in the sources, in
-# German or English: the model rendered Achtelfinale as "quarterfinals"
-# and no numeric check could see it (owner's read, 2026-10-20). Bare
-# "final" is skipped: too ambiguous ("final score", "finals").
-_ROUND_TERMS = {
-    "round of 16": ("achtelfinale", "round of 16"),
-    "quarterfinal": ("viertelfinale", "quarterfinal"),
-    "semifinal": ("halbfinale", "semifinal"),
-}
-
-
-def _rounds_ok(text: str, sources: str) -> bool:
+# the source language or English: the model rendered Achtelfinale as
+# "quarterfinals" and no numeric check could see it (owner's read,
+# 2026-10-20). Bare "final" is skipped: too ambiguous ("final score",
+# "finals"). Source-language round names live in league.LEXICON.
+def _rounds_ok(text: str, sources: str, league: League = BBL) -> bool:
     text = text.lower().replace("-", "")
     sources = sources.lower().replace("-", "")
     return all(
-        any(marker in sources for marker in markers)
-        for term, markers in _ROUND_TERMS.items()
+        any(marker.replace("-", "") in sources for marker in (*markers, term))
+        for term, markers in league.lexicon["rounds"].items()
         if term in text
     )
 
 
-def validate(headline: str, summary: str, source_bodies: list[str]) -> dict:
+def validate(headline: str, summary: str, source_bodies: list[str], league: League = BBL) -> dict:
     """Checks are conservative: fail on anything the renderer should not
     publish unreviewed. Returns {check: ok} plus a 'failed' list."""
     text = f"{headline} {summary}"
@@ -172,7 +165,7 @@ def validate(headline: str, summary: str, source_bodies: list[str]) -> dict:
     numbers_ok = all(traceable(n) for n in re.findall(r"\d{2,}", text))
     words = len(summary.split())
     length_ok = MIN_WORDS <= words <= MAX_WORDS
-    english_ok = len(_GERMAN_MARKERS.findall(text)) <= 1
+    english_ok = len(league.markers().findall(text)) <= 1
     no_urls_ok = "http" not in text.lower()
     # truncated model output can be valid JSON and pass every other check
     # (observed 2026-10-20: a summary ending "...described it as their")
@@ -184,7 +177,7 @@ def validate(headline: str, summary: str, source_bodies: list[str]) -> dict:
         "english": english_ok,
         "no_urls": no_urls_ok,
         "complete_sentence": complete_ok,
-        "round_names": _rounds_ok(text, joined_sources),
+        "round_names": _rounds_ok(text, joined_sources, league),
     }
     return {**checks, "failed": sorted(k for k, ok in checks.items() if not ok)}
 
@@ -241,6 +234,7 @@ def summarize_story(
     generate: Generate,
     model: str,
     now: Optional[datetime] = None,
+    league: League = BBL,
 ) -> SummaryResult:
     members = _story_members(con, story_id)
     if not members:
@@ -257,6 +251,7 @@ def summarize_story(
     prompt = build_prompt(
         [(pub, title, body) for (_, _, pub, title, _), body in zip(members, bodies)],
         game_line=_game_line(con, story_id),
+        league=league,
     )
     started = time.monotonic()
     raw = generate(prompt)
@@ -264,7 +259,7 @@ def summarize_story(
 
     try:
         headline, summary = parse_response(raw)
-        checks = validate(headline, summary, bodies)
+        checks = validate(headline, summary, bodies, league)
         status = "candidate" if not checks["failed"] else "rejected"
         text_en = f"{headline}\n\n{summary}"
     except (ValueError, json.JSONDecodeError) as exc:
@@ -290,6 +285,7 @@ def summarize_pending(
     now: Optional[datetime] = None,
     limit: Optional[int] = None,
     progress=None,
+    league: League = BBL,
 ) -> list[SummaryResult]:
     """Summarize stories that have no summary for the current inputs yet.
     Game stories first (they are the newsletter's core), then multi-source
@@ -309,7 +305,7 @@ def summarize_pending(
         if limit is not None and calls >= limit:
             break
         try:
-            result = summarize_story(con, story_id, generate, model, now=now)
+            result = summarize_story(con, story_id, generate, model, now=now, league=league)
         except Exception as exc:  # model/transport failure: skip, keep going
             result = SummaryResult(story_id, f"error:{type(exc).__name__}", [str(exc)[:200]])
             calls += 1

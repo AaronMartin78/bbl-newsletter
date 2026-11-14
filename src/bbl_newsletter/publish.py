@@ -41,6 +41,7 @@ def publish_edition(
     dest_dir: str = "bbl/posts",
     remote: str = "origin",
     push: bool = True,
+    title: str = "BBL Daily",
 ) -> dict:
     """Copy the edition into the website clone, commit on `branch`, push.
 
@@ -70,7 +71,7 @@ def publish_edition(
         commit = _git(repo_dir, "rev-parse", "HEAD")
         return {"status": "unchanged", "commit": commit}
 
-    _git(repo_dir, "commit", "-m", f"BBL Daily {edition_date.isoformat()} (automated)")
+    _git(repo_dir, "commit", "-m", f"{title} {edition_date.isoformat()} (automated)")
     commit = _git(repo_dir, "rev-parse", "HEAD")
     if push:
         _git(repo_dir, "push", remote, f"{branch}:{branch}")

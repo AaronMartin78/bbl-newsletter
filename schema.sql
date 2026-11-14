@@ -44,10 +44,19 @@ CREATE TABLE IF NOT EXISTS teams (
   aliases  TEXT[]                      -- name variants for article matching (never join on names)
 );
 
+-- Extra team-name variants, append-only (league_db leagues load their sponsor
+-- names here: DuckDB cannot rewrite teams.aliases once games reference a team).
+CREATE TABLE IF NOT EXISTS team_aliases (
+  team_id TEXT NOT NULL REFERENCES teams(team_id),
+  alias   TEXT NOT NULL,
+  PRIMARY KEY (team_id, alias)
+);
+
 CREATE TABLE IF NOT EXISTS seasons (
   season_uid  TEXT PRIMARY KEY,        -- '<competition>-<label>', e.g. 'bbl-2026-27'
   competition TEXT NOT NULL CHECK (competition IN
-                ('bbl','pokal','euroleague','eurocup','bcl','fiba_ec','friendly')),
+                ('bbl','pokal','euroleague','eurocup','bcl','fiba_ec','friendly',
+                 'acb','lnb','gbl','aba')),  -- league_db leagues (bbl_newsletter.league_db)
   label       TEXT NOT NULL,           -- '2026-27'
   start_date  DATE,
   end_date    DATE
