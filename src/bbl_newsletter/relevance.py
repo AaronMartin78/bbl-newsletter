@@ -13,17 +13,19 @@ from __future__ import annotations
 
 import re
 
+from .league import BBL, LEXICON, League
 from .registry import Source
 
+# Terms that mark basketball in any league; "bbl" is listed with the BBL clubs.
 GENERAL = [
-    "basketball", "bbl", "euroleague", "eurocup",
+    "basketball", "euroleague", "eurocup",
     "champions league basketball", "fiba",
 ]
 
 # Distinctive club tokens; deliberately not bare city names, which are
 # dominated by football in regional sport feeds.
 CLUBS = [
-    "fc bayern basketball", "alba", "albatrosse",
+    "bbl", "fc bayern basketball", "alba", "albatrosse",
     "ratiopharm ulm", "bamberg baskets", "würzburg baskets", "wuerzburg baskets",
     "niners", "science city jena", "mhp riesen", "skyliners",
     "towers", "ewe baskets", "basketball löwen", "basketball loewen",
@@ -46,20 +48,24 @@ ALWAYS_RELEVANT_TYPES = {"league", "club", "aggregator"}
 # a website ("begins tomorrow at 10:00 AM"); filtered by title for every
 # source type, clubs included (owner review problem 5, 2026-10-14). Only
 # unambiguous sale/promo words - a bare "Ticket" can be legitimate news.
-_PROMO = re.compile(
-    r"\b(vorverkauf|dauerkarten?|ticketverkauf|ticketshop|gewinnspiel|verlosung)\b",
-    re.IGNORECASE,
-)
+# The words per source language are in league.LEXICON; a source language
+# without a lexicon (English aggregators) has no promo filter.
+def is_promo(*texts: str | None, language: str = "de") -> bool:
+    if language not in LEXICON:
+        return False
+    pattern = r"\b(" + LEXICON[language]["promo"] + r")\b"
+    return bool(re.search(pattern, " ".join(t for t in texts if t), re.IGNORECASE))
 
 
-def is_promo(*texts: str | None) -> bool:
-    return bool(_PROMO.search(" ".join(t for t in texts if t)))
-
-
-def is_candidate(source: Source, *texts: str | None) -> bool:
+def is_candidate(source: Source, *texts: str | None, league: League = BBL) -> bool:
     if source.type in ALWAYS_RELEVANT_TYPES:
         return True
     blob = " ".join(t for t in texts if t)
     if not blob:
         return True  # nothing to judge by; let the body decide later
+    if league.code != BBL.code:
+        # Other leagues: the general terms plus that league's own keywords.
+        keywords = GENERAL + list(league.keywords)
+        pattern = r"\b(" + "|".join(re.escape(k) for k in keywords) + r")s?\b"
+        return bool(re.search(pattern, blob, re.IGNORECASE))
     return bool(_PATTERN.search(blob))

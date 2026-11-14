@@ -1,4 +1,4 @@
-"""Read-only canonical BBL box scores; no scraping, name matching or model calls."""
+"""Read-only canonical league box scores; no scraping, name matching or model calls."""
 from __future__ import annotations
 
 import logging
@@ -6,6 +6,8 @@ import math
 import sqlite3
 from html import escape
 from pathlib import Path
+
+from .league import BBL, League
 
 LOG = logging.getLogger(__name__)
 STATS = ('seconds_played', 'points', 'two_point_made', 'two_point_attempted',
@@ -15,10 +17,12 @@ STATS = ('seconds_played', 'points', 'two_point_made', 'two_point_attempted',
          'steals', 'turnovers', 'blocks', 'fouls_committed', 'plus_minus')
 
 
-def load_boxscores(con, source: Path, game_uids: list[str]) -> dict[str, dict]:
+def load_boxscores(con, source: Path, game_uids: list[str], league: League = BBL) -> dict[str, dict]:
     """Read one consistent transaction; omit unknown, incomplete or conflicting games.
 
-    canonical_games/shared_franchises are the existing newsletter alignment.
+    BBL: canonical_games/shared_franchises are the existing newsletter alignment.
+    league_db leagues: the newsletter's games and teams were loaded from this
+    same database, so the clubs recorded there must match the database row.
     SQLite repository team/player keys are never confused with provider IDs.
     The configured source is opened mode=ro and is never migrated or modified.
     """
@@ -33,19 +37,28 @@ def load_boxscores(con, source: Path, game_uids: list[str]) -> dict[str, dict]:
         db.execute('BEGIN')
         for uid in sorted(set(game_uids)):
             prefix, _, provider_id = uid.partition(':')
-            if prefix not in ('bbl', 'pokal') or not provider_id.isdigit():
+            if prefix not in league.competitions or not provider_id.isdigit():
                 continue
             try:
-                mapping = con.execute('''SELECT game_id, home_team_id, away_team_id,
-                    home_franchise_id, away_franchise_id FROM canonical_games
-                    WHERE game_uid=?''', [uid]).fetchone()
+                if league.games_source == 'league_db':
+                    mapping = con.execute('''SELECT ?, NULL, NULL, TRY_CAST(th.bbl_id AS BIGINT),
+                        TRY_CAST(ta.bbl_id AS BIGINT) FROM games g
+                        JOIN teams th ON th.team_id = g.home_team_id
+                        JOIN teams ta ON ta.team_id = g.away_team_id
+                        WHERE g.game_uid=?''', [int(provider_id), uid]).fetchone()
+                else:
+                    mapping = con.execute('''SELECT game_id, home_team_id, away_team_id,
+                        home_franchise_id, away_franchise_id FROM canonical_games
+                        WHERE game_uid=?''', [uid]).fetchone()
                 if not mapping or mapping[0] != int(provider_id):
                     raise ValueError('game missing from canonical reference')
                 raw = db.execute('SELECT * FROM games WHERE game_id=?', [mapping[0]]).fetchone()
                 if raw is None or raw['status'] != 'OFFICIAL':
                     raise ValueError('official result not available')
-                expected_competition = 'BBL' if prefix == 'bbl' else 'BBL_CUP'
-                if raw['competition'] != expected_competition:
+                if league.games_source == 'league_db':
+                    # canonical team ids come from the database itself; the clubs are checked
+                    mapping = (mapping[0], raw['home_team_id'], raw['away_team_id'], *mapping[3:])
+                if raw['competition'] != league.competitions[prefix]:
                     raise ValueError('competition identity conflict')
                 actual = (raw['home_team_id'], raw['away_team_id'],
                           raw['home_franchise_id'], raw['guest_franchise_id'])
@@ -77,7 +90,7 @@ def load_boxscores(con, source: Path, game_uids: list[str]) -> dict[str, dict]:
                     if sum(p['points'] for p in roster) != scores[index]:
                         raise ValueError('player points do not reconcile to final score')
                     for player in roster:
-                        identity = player['bbl_season_player_id']
+                        identity = player[league.player_identity_column]
                         if not player['player_id'] or identity in seen_players:
                             raise ValueError('missing or duplicate player identity')
                         seen_players.add(identity)

@@ -14,6 +14,8 @@ from typing import Optional
 
 import duckdb
 
+from .league import BBL, League
+
 SECTION_ORDER = ["games", "euroleague", "team_news"]
 SECTION_TITLES = {
     "games": "Games",
@@ -119,6 +121,7 @@ def render_edition(
     out_dir: Path,
     now: Optional[datetime] = None,
     boxscore_database: Optional[Path] = None,
+    league: League = BBL,
 ) -> Optional[Path]:
     """Write <out_dir>/<date>.qmd and record the edition. Returns the path,
     or None when there is nothing publishable (no empty editions)."""
@@ -128,7 +131,8 @@ def render_edition(
         return None
 
     from .boxscores import load_boxscores, render_boxscore
-    boxes = load_boxscores(con, boxscore_database, [r[3] for r in rows if r[3] and (r[8] == 'final' or r[9])]) if boxscore_database else {}
+    boxes = load_boxscores(con, boxscore_database, [r[3] for r in rows if r[3] and (r[8] == 'final' or r[9])],
+                           league) if boxscore_database else {}
 
     sections: dict[str, list[str]] = {s: [] for s in SECTION_ORDER}
     items: list[tuple[str, str, int]] = []  # (summary_id, section, position)
@@ -146,13 +150,13 @@ def render_edition(
             body = f"{note}\n\n{body}"
         citations = _citations(con, story_id)
         box_md = ''
-        if _game_uid and (game_status == 'final' or has_recap) and _game_uid.split(':')[0] in ('bbl', 'pokal') and boxscore_database:
+        if _game_uid and (game_status == 'final' or has_recap) and _game_uid.split(':')[0] in league.competitions and boxscore_database:
             box = boxes.get(_game_uid)
             if box:
                 box_md = render_boxscore(box)
-                official_url = f'https://www.easycredit-bbl.de/spiele/{box["game_id"]}'
-                if official_url not in [c[2] for c in citations]:
-                    citations.append(('easyCredit BBL', 'Official game and box score', official_url))
+                official_url = league.official_url(box["game_id"])
+                if official_url and official_url not in [c[2] for c in citations]:
+                    citations.append((league.name, 'Official game and box score', official_url))
             else:
                 box_md = '*Box score unavailable.*'
         sections[section].append(_item_md(headline.strip(), body.strip(), citations, box_md))
@@ -160,9 +164,9 @@ def render_edition(
 
     parts = [
         "---",
-        f'title: "BBL Daily - {edition_date:%d %B %Y}"',
+        f'title: "{league.edition_title} - {edition_date:%d %B %Y}"',
         f"date: {edition_date.isoformat()}",
-        "categories: [bbl]",
+        f"categories: [{league.code}]",
         "lang: en",
         "---",
         "",

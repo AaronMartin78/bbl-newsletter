@@ -28,6 +28,7 @@ from . import cluster as cluster_mod
 from . import db
 from .collect import collect_all
 from .fetch import Fetcher
+from .league import League
 from .registry import Registry
 from .render import render_edition
 from .schedule import collect_schedule, collect_schedule_api
@@ -109,6 +110,14 @@ def main(argv: list[str] | None = None) -> int:
     cfg = load_config(args.config)
     base = args.config.parent
     registry = Registry.load(base / cfg["registry"])
+    league = League.from_config(cfg)
+    boxscore_database = cfg.get("boxscore_database")
+    if boxscore_database:
+        boxscore_database = base / boxscore_database
+        if boxscore_database.suffix == ".json":
+            # a lake current.json pointer names the latest published copy beside it
+            pointer = json.loads(boxscore_database.read_text(encoding="utf-8"))
+            boxscore_database = boxscore_database.parent / pointer["database"]
     edition_date = args.date or datetime.now(BERLIN).date()
 
     db_path = base / cfg["db"]
@@ -133,6 +142,7 @@ def main(argv: list[str] | None = None) -> int:
                 + (f", {len(r.errors)} errors" if r.errors else ""),
                 file=sys.stderr, flush=True,
             ),
+            league=league,
         )
         out["collect"] = {
             "run_id": run_id,
@@ -142,7 +152,11 @@ def main(argv: list[str] | None = None) -> int:
         }
         fetcher.close()
 
-    if args.command in ("schedule", "run"):
+    if args.command in ("schedule", "run") and league.games_source == "league_db":
+        from .league_db import load_games
+        out["schedule"] = load_games(con, league, boxscore_database)
+
+    if args.command in ("schedule", "run") and league.games_source == "bbl_api":
         fetcher = make_fetcher(registry)
         listing = cfg.get(
             "schedule_listing", "https://www.easycredit-bbl.de/spielplan"
@@ -164,7 +178,7 @@ def main(argv: list[str] | None = None) -> int:
         generate, model = make_generator(cfg, model_override=args.model)
         print(f"summarizing with {model} (limit {args.limit})...",
               file=sys.stderr, flush=True)
-        results = summarize_pending(con, generate, model, limit=args.limit,
+        results = summarize_pending(con, generate, model, limit=args.limit, league=league,
                                     progress=lambda r: print(
                                         f"  {r.summary_id[:12] or r.status}: {r.status}",
                                         file=sys.stderr, flush=True))
@@ -176,9 +190,8 @@ def main(argv: list[str] | None = None) -> int:
         }
 
     if args.command in ("render", "run"):
-        boxscore_database = cfg.get('boxscore_database')
         path = render_edition(con, edition_date, base / cfg["site_dir"],
-                              boxscore_database=base / boxscore_database if boxscore_database else None)
+                              boxscore_database=boxscore_database or None, league=league)
         out["render"] = str(path) if path else None
 
     if args.command in ("publish", "run"):
@@ -196,6 +209,7 @@ def main(argv: list[str] | None = None) -> int:
                 out["publish"] = publish_edition(
                     con, edition_date, qmd, Path(cfg["website_repo"]),
                     branch=cfg.get("website_branch", "editions"),
+                    dest_dir=league.posts_dir, title=league.edition_title,
                 )
             except PublishError as exc:
                 out["publish"] = f"failed: {exc}"

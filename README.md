@@ -35,6 +35,8 @@ summary text, summary IDs and live edition receipts untouched until deployment.
 
 ## Layout
 
+- `src/bbl_newsletter/league.py` / `league_db.py` - league profiles and the
+  league-database loader; see "Other leagues".
 - `src/bbl_newsletter/ids.py` - hash/id conventions (canonical URL, article_id,
   content_hash, story_id, summary_id, game_uid). The single implementation of
   what schema.sql documents.
@@ -109,6 +111,37 @@ cross-tested against this renderer's output), `../deploy/` (CM4 wake
 timer units and install notes).
 
 Not yet built: private delivery of full translations (Discord webhook).
+
+## Other leagues
+
+The same package writes one newsletter per league. Each league has its own
+`config_<league>.yaml` (template: `config.league.example.yaml`), DuckDB,
+data folder and source registry; `config.yaml` without a `league` block is
+the BBL and behaves exactly as before. Run a league with
+`python -m bbl_newsletter --config config_acb.yaml run`.
+
+`src/bbl_newsletter/league.py` holds the profile (name, source language,
+competition codes, official game URL, player-id column, edition title) and
+the per-language words for the English check, round names and promo
+filter. For `games_source: league_db` leagues, `league_db.py` loads the
+latest season's teams and games read-only from the league database that the
+mule collector publishes to the NAS lake (`boxscore_database` may name the
+lake's `current.json`), so the schedule stage scrapes nothing:
+
+- `game_uid` = `<prefix>:<games.game_id>`, the league database's game id;
+- `team_id` = `<league>:<franchise_id>`, the provider's stable club id
+  (also in `teams.bbl_id`); sponsor names go to `team_aliases`.
+
+Box scores come from the same file with the same reconciliation checks.
+
+| League | code | language | competitions | player_identity_column | official_game_url |
+|---|---|---|---|---|---|
+| Liga Endesa | acb | es | `{acb: ACB}` | acb_player_id | `https://live.acb.com/es/partidos/{game_id}/estadisticas` |
+| LNB Elite | lnb | fr | `{lnb: LNB}` | lnb_player_id | empty for now |
+| Greek Basket League | gbl | el | `{gbl: GBL}` | esake_player_id | `https://www.esake.gr/el/action/EsakegameView?idgame={game_id:08X}` |
+| ABA League | aba | sh | `{aba: ABA}` | aba_player_id | empty (`game_id` is season x 10000 + match) |
+
+Editions go to `<code>/posts/` in the website repo.
 
 ## Run the pipeline
 

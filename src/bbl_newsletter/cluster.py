@@ -71,6 +71,8 @@ def _team_patterns(con: duckdb.DuckDBPyConnection) -> dict[str, re.Pattern]:
         bag.update(aliases or [])
         bag.update(t for t, slug in SLUG_OVERRIDES
                    if slug == team_id and t not in GENERIC_TOKENS)
+    for team_id, alias in con.execute("SELECT team_id, alias FROM team_aliases").fetchall():
+        tokens.setdefault(team_id, set()).add(alias)
     return {
         team_id: re.compile(
             # closing \b so a short alias cannot match inside a longer word

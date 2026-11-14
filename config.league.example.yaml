@@ -1,0 +1,41 @@
+# Newsletter for a league whose daily collector builds a league database
+# (ACB, LNB, GBL, ABA). Copy to config_<league>.yaml on HUB; one config,
+# DuckDB, data folder and registry per league. config.yaml stays the BBL.
+# Values below are for Liga Endesa (ACB); see README "Other leagues" for
+# the LNB, GBL and ABA values.
+
+registry: ./newsletter_sources_acb.yaml
+schema: ./schema.sql
+db: data/acb/newsletter.duckdb
+data_dir: data/acb
+site_dir: site/acb
+
+# Read-only league database on the NAS lake: teams, games and box scores.
+# The lake's current.json is followed to the latest published copy.
+boxscore_database: /mnt/data_lake/sqlite/acb/current.json
+
+website_repo: /home/aaron-martin/newsletter/website
+website_branch: editions
+
+league:
+  code: acb
+  name: Liga Endesa
+  description: Spanish professional basketball (Liga Endesa)
+  source_language: es
+  competitions: {acb: ACB}            # game_uid prefix -> games.competition
+  games_source: league_db
+  official_game_url: "https://live.acb.com/es/partidos/{game_id}/estadisticas"
+  player_identity_column: acb_player_id
+  edition_title: Liga Endesa Daily
+  keywords: [baloncesto, acb, liga endesa]
+  aliases: {}                         # provider club id -> extra names, e.g. {14: [Baskonia]}
+
+ollama:
+  host: http://127.0.0.1:11434
+  model: llama3.1:8b
+  timeout_s: 900
+  think: false
+  options:
+    temperature: 0.2
+    num_ctx: 8192
+    num_predict: 350
